@@ -1,0 +1,9 @@
+{
+  "job_title_keywords": ["CEO", "Chief Executive Officer", "CTO", "Chief Technology Officer", "COO", "Chief Operating Officer", "CFO", "Chief Financial Officer", "CIO", "Chief Information Officer"],
+  "current_role_max_months_since_start_date": 3,
+  "profile_keywords": ["artificial intelligence", "AI", "business transformation", "digital transformation", "technology initiatives", "IT modernization"],
+  "location_states_include": ["Connecticut", "Maine", "Massachusetts", "New Hampshire", "Rhode Island", "Vermont", "New York", "New Jersey", "Pennsylvania", "Georgia", "Illinois"],
+  "location_countries_include": ["United States"],
+  "company_sizes": ["51-200", "201-500", "501-1,000"],
+  "company_industries_include": ["Hospitals and Health Care", "Medical Practices", "Financial Services", "Banking", "Investment Management", "Insurance", "Law Practice", "Legal Services", "Accounting", "Biotechnology Research", "Pharmaceutical Manufacturing", "Writing and Editing"]
+}
