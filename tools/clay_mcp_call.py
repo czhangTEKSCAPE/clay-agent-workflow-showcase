@@ -12,21 +12,20 @@ Usage:
 Tools: read, edit_node, validate_workflow, execute_clay_action,
        surfaces_read, surfaces_list, surfaces_edit_trigger, table
 """
-import glob
 import json
-import os
 import select
 import subprocess
 import sys
 
+from clay_cli import plugin_clay
+
 
 def newest_clay() -> str:
     """Resolve the newest plugin-pinned clay launcher (survives plugin updates)."""
-    candidates = glob.glob(os.path.expanduser(
-        "~/.claude/plugins/cache/clay-plugins/clay/*/bin/clay"))
-    if not candidates:
+    path = plugin_clay()
+    if not path:
         sys.exit("no clay launcher found in plugin cache; reinstall the Clay plugin")
-    return max(candidates, key=os.path.getmtime)
+    return path
 
 
 def main() -> None:

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Shared helpers for building Clay workflows through the CLI.
 
-Used by build_contact_enrichment.py (Azure WAR), build_precast_qualifier.py and
-build_precast_upsert.py. Two passes per builder: create every node without edges (ids cached
-in tools/workflow_code/<name>_nodes.json so re-runs are idempotent), then update each node
-with incomingEdges, inputSchema pins and the tool's inputMappingConfig.
+Imported by per-campaign builder scripts (not included in this extract). Each builder makes two passes:
+create every node without edges (ids cached in tools/workflow_code/<name>_nodes.json so re-runs are
+idempotent), then update each node with incomingEdges, inputSchema pins and the tool's inputMappingConfig.
 """
-import glob, json, os, shutil, subprocess, sys
+import json, os, subprocess, sys
+
+from clay_cli import find_clay
 
 CODE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflow_code")
 PROMPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "prompts")
@@ -52,24 +53,15 @@ MOBILE = [
 ]
 
 
-def clay_bin():
-    p = shutil.which("clay")
-    if p:
-        return p
-    p = os.path.expanduser("~/.local/bin/clay")
-    if os.path.exists(p):
-        return p
-    c = glob.glob(os.path.expanduser("~/.claude/plugins/cache/clay-plugins/clay/*/bin/clay"))
-    return max(c, key=os.path.getmtime) if c else sys.exit("clay CLI not found")
-
-
-CLAY = clay_bin()
+CLAY = find_clay()  # None when the CLI is absent, so the module stays importable; cli() fails with a clear message
 
 
 def cli(*args, inp=None, flag="--input", retries=3):
     """Run a clay CLI command and parse its JSON. Transient server errors (HTTP 504, "Terracotta could not complete this request",
     seen 2026-10-20) are retried up to `retries` times with a short backoff; any other error exits."""
     import time as _time
+    if not CLAY:
+        sys.exit("clay CLI not found: install it and run `clay whoami`")
     cmd = [CLAY, *args] + ([flag, "-"] if inp is not None else [])
     for attempt in range(retries + 1):
         out = subprocess.run(cmd, input=json.dumps(inp) if inp is not None else None, capture_output=True, text=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run CSV rows through a Clay workflow's manual trigger and poll to completion (generic war_batch.py).
+"""Run CSV rows through a Clay workflow's manual trigger and poll to completion.
 
 Usage: wf_batch.py <rows.csv> --workflow wf_... [--inputs col,col,...] [--limit N] [--skip-suppressed]
                    [--extra key=value ...] [--out exports/<name>-runs-<date>.json] [--key domain]
@@ -8,7 +8,7 @@ Writes {key: {runId, status, credits, steps}} for the collect scripts.
 """
 import argparse, csv, re, datetime as dt, json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from clay_build import CLAY
+from clay_cli import require_clay
 
 
 def start_run(clay, workflow, payload, approve_runs=False):
@@ -50,6 +50,7 @@ def main():
     ap.add_argument("--name", default="runs")
     ap.add_argument("--approve-runs", action="store_true", help="the human approved this batch: approve Clay's per-run spend requests")
     a = ap.parse_args()
+    CLAY = require_clay()
     rows = list(csv.DictReader(open(a.csv)))
     if a.skip_suppressed:
         rows = [r for r in rows if (r.get("suppressed") or "").lower() != "yes"]

@@ -1,70 +1,93 @@
 #!/usr/bin/env python3
-"""Launch a list of leads through the campaign workflow and poll to completion.
+"""Launch a list of leads through a Clay workflow and poll to completion.
 
-Usage: batch_run.py <leads.json> [workflowId]
+Usage:
+  batch_run.py <leads.json> <workflow_id>
 
 leads.json format:
   [{"name": "Jane Doe (CFO, Acme)", "url": "https://www.linkedin.com/in/janedoe/"}, ...]
+
+Prints one line per lead as it finishes, then a JSON summary with status and credits used.
 """
-import glob
+import argparse
 import json
-import os
 import subprocess
 import sys
 import time
 
-WF = sys.argv[2] if len(sys.argv) > 2 else "wf_YOUR_WORKFLOW_ID"
+from clay_cli import require_clay
+
+TERMINAL = ("completed", "failed")
 
 
-def newest_clay() -> str:
-    candidates = glob.glob(os.path.expanduser(
-        "~/.claude/plugins/cache/clay-plugins/clay/*/bin/clay"))
-    if not candidates:
-        sys.exit("no clay launcher found in plugin cache")
-    return max(candidates, key=os.path.getmtime)
-
-
-CLAY = newest_clay()
-
-leads = json.load(open(sys.argv[1]))
-runs = {}
-for lead in leads:
-    out = subprocess.run([CLAY, "workflows", "runs", "test", WF, "--input", "-"],
+def launch(clay, workflow, lead):
+    """Start one run and return its runId, or None if Clay did not return one."""
+    out = subprocess.run([clay, "workflows", "runs", "test", workflow, "--input", "-"],
                          input=json.dumps({"linkedin_url": lead["url"]}),
                          capture_output=True, text=True)
     try:
-        rid = json.loads(out.stdout).get("runId")
-    except Exception:
-        rid = None
-    runs[lead["name"]] = {"runId": rid, "url": lead["url"]}
-    print(f"launched {lead['name']} -> {rid}", flush=True)
-    time.sleep(3)
+        return json.loads(out.stdout).get("runId")
+    except (ValueError, AttributeError):
+        return None
 
-deadline = time.time() + 50 * 60
-while time.time() < deadline:
-    pending = False
-    for name, info in runs.items():
-        if info.get("status") in ("completed", "failed") or not info.get("runId"):
-            continue
-        st = subprocess.run([CLAY, "workflows", "runs", "get", WF, info["runId"]],
-                            capture_output=True, text=True)
-        try:
-            d = json.loads(st.stdout)
-        except Exception:
-            continue
-        if d.get("status") in ("completed", "failed"):
-            info["status"] = d.get("status")
-            info["error"] = (d.get("error") or "")[:150]
-            info["credits"] = round((d.get("dataCreditsUsed") or 0)
-                                    + (d.get("actionCreditsUsed") or 0), 1)
-            info["steps"] = (d.get("progress") or {}).get("completed")
-            print(f"DONE {name}: {info['status']} steps={info['steps']} "
-                  f"credits={info['credits']} {info['error']}", flush=True)
-        else:
-            pending = True
-    if not pending:
-        break
-    time.sleep(45)
 
-print("BATCH SUMMARY:")
-print(json.dumps(runs, indent=1))
+def summarize(run):
+    """Reduce a `runs get` response to the fields we report."""
+    return {
+        "status": run.get("status"),
+        "error": (run.get("error") or "")[:150],
+        "credits": round((run.get("dataCreditsUsed") or 0) + (run.get("actionCreditsUsed") or 0), 1),
+        "steps": (run.get("progress") or {}).get("completed"),
+    }
+
+
+def poll(clay, workflow, runs, timeout_s=50 * 60, interval_s=45):
+    """Poll every launched run until all reach a terminal state or the deadline passes."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        pending = False
+        for name, info in runs.items():
+            if info.get("status") in TERMINAL or not info.get("runId"):
+                continue
+            res = subprocess.run([clay, "workflows", "runs", "get", workflow, info["runId"]],
+                                 capture_output=True, text=True)
+            try:
+                data = json.loads(res.stdout)
+            except ValueError:
+                continue
+            if data.get("status") in TERMINAL:
+                info.update(summarize(data))
+                print(f"DONE {name}: {info['status']} steps={info['steps']} "
+                      f"credits={info['credits']} {info['error']}", flush=True)
+            else:
+                pending = True
+        if not pending:
+            break
+        time.sleep(interval_s)
+    return runs
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("leads", help="path to leads.json")
+    ap.add_argument("workflow", help="Clay workflow id (wf_...)")
+    args = ap.parse_args(argv)
+
+    clay = require_clay()
+    with open(args.leads) as f:
+        leads = json.load(f)
+
+    runs = {}
+    for lead in leads:
+        run_id = launch(clay, args.workflow, lead)
+        runs[lead["name"]] = {"runId": run_id, "url": lead["url"]}
+        print(f"launched {lead['name']} -> {run_id}", flush=True)
+        time.sleep(3)
+
+    poll(clay, args.workflow, runs)
+    print("BATCH SUMMARY:")
+    print(json.dumps(runs, indent=1))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

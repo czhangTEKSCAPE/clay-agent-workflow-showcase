@@ -24,7 +24,8 @@ def run(code_path, out_path, inputs):
     spec = importlib.util.spec_from_file_location("node", code_path)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     out = mod.handler(Ctx(inputs))
-    schema = json.load(open(out_path))
+    with open(out_path) as f:
+        schema = json.load(f)
     errs = []
     for k, v in schema.items():
         if k not in out or out[k] is None:
@@ -37,7 +38,11 @@ def run(code_path, out_path, inputs):
 
 if __name__ == "__main__":
     code, outs, inp = sys.argv[1:4]
-    inputs = json.load(sys.stdin if inp == "-" else open(inp))
+    if inp == "-":
+        inputs = json.load(sys.stdin)
+    else:
+        with open(inp) as f:
+            inputs = json.load(f)
     out, errs, extra = run(code, outs, inputs)
     print(json.dumps({"errors": errs, "extra_outputs": extra, "output": out if "--show" in sys.argv else {k: out[k] for k in list(out)[:12]}}, indent=1))
     sys.exit(1 if errs else 0)
